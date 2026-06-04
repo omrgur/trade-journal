@@ -34,7 +34,7 @@ export default function IslemlerPage() {
 
     const res = await fetch(`/api/islemler?${params}`)
     const data = await res.json()
-    setIslemler(data)
+    setIslemler(Array.isArray(data) ? data : [])
     setYukleniyor(false)
   }, [filtreler])
 
