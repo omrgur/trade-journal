@@ -1,10 +1,12 @@
 """
-Trade Journal Telegram Botu — v3
-Koç + asistan kişiliği, onay akışlı, çoklu hesap destekli
+Trade Journal Telegram Botu — v4
+Koç + asistan kişiliği, Gemini direkt entegrasyon
 """
 import os
 import logging
+import asyncio
 import httpx
+import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -16,14 +18,89 @@ load_dotenv()
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 API_URL = os.environ["NEXT_PUBLIC_APP_URL"].rstrip("/")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 client = httpx.AsyncClient(timeout=30)
 
+# Gemini kurulumu
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    logger.info("Gemini API bağlandı")
+else:
+    logger.warning("GEMINI_API_KEY bulunamadı — sohbet modu devre dışı")
+
+SOHBET_KARAKTERI = """Sen bir trade koçu ve günlük yol arkadaşısın.
+
+KİŞİLİK:
+- Samimi, doğal, kısa konuşursun
+- Hitap: "kardeşim", "reis", "dostum" — doğal akışta, her cümlede değil
+- Espri yapabilirsin ama abartmadan
+
+SELAMLAMA KURALLARI:
+- "selam", "günaydın", "naber", "nasılsın" gibi mesajlara sıcak ve kısa karşılık ver
+- İşlem sorma, format verme, örnek verme — ASLA
+- Sadece sohbet et: nasılsın, gün nasıl, piyasalar nasıl gibi
+
+GENEL SOHBET:
+- Trade dışı konulardan bahsediyorsa onunla konuş
+- Her şeyi trade'e bağlamak zorunda değilsin
+- İnsan gibi davran, 2-3 cümle yeter
+
+YAPMA:
+- Örnek trade formatı verme (hiçbir zaman)
+- Robot kalıpları kullanma
+- Her mesaja aynı cevabı verme — FARKLI cevaplar üret"""
+
 # Onay bekleyen işlemler: chat_id → işlem verisi
 pending_trades: dict[int, dict] = {}
+
+
+# ── Gemini direkt fonksiyonları ──────────────────────────────
+
+async def gemini_sohbet(mesaj: str) -> str | None:
+    """Sohbet mesajına Gemini karakteriyle cevap ver."""
+    if not GEMINI_API_KEY:
+        return None
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=SOHBET_KARAKTERI
+        )
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: model.generate_content(mesaj)
+        )
+        return response.text
+    except Exception as e:
+        logger.error(f"Gemini sohbet hata: {e}")
+        return None
+
+
+async def gemini_koc_yorum(islem_ozet: str) -> str | None:
+    """İşlem sonrası koç yorumu üret."""
+    if not GEMINI_API_KEY:
+        return None
+    koc_karakteri = (
+        "Sen samimi bir trade koçusun. İşlem verildikten sonra kısa ve net yorum yaparsın. "
+        "Hitap: 'kardeşim', 'reis', 'dostum' — doğal akışta. "
+        "1 geri bildirim + en fazla 2 soru. Toplam 3-4 cümle. Türkçe. "
+        "Teknik analiz değil, psikoloji ve davranış odaklı. "
+        "Örnek format asla verme."
+    )
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=koc_karakteri
+        )
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: model.generate_content(f"Az önce şu işlemi kapattım: {islem_ozet}")
+        )
+        return response.text
+    except Exception as e:
+        logger.error(f"Gemini koç yorum hata: {e}")
+        return None
 
 # Trade mesajı mı sohbet mi — hızlı keyword kontrolü
 TRADE_KELIMELERI = [
@@ -216,14 +293,18 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=ReplyKeyboardRemove()
                 )
 
-                # Gemini karakter cevabı
+                # Gemini koç cevabı — işlem sonrası
                 try:
-                    gemini_res = await api_post("/api/gemini/islem-sonrasi", json={"islem": sonuc})
-                    karakter_mesaj = gemini_res.get("mesaj") if isinstance(gemini_res, dict) else None
+                    islem_ozet = (
+                        f"{sonuc.get('enstruman','?')} {(sonuc.get('yon') or '').upper()} | "
+                        f"Giriş: {sonuc.get('giris_fiyati','?')} → Çıkış: {sonuc.get('cikis_fiyati','?')} | "
+                        f"PnL: {pnl_str} | RR: {sonuc.get('rr_orani','?')}"
+                    )
+                    karakter_mesaj = await gemini_koc_yorum(islem_ozet)
                     if karakter_mesaj:
                         await update.message.reply_text(karakter_mesaj, parse_mode="Markdown")
                 except Exception as ge:
-                    logger.warning(f"Gemini karakter cevabı alınamadı: {ge}")
+                    logger.warning(f"Gemini koç yorumu alınamadı: {ge}")
 
             except Exception as e:
                 logger.error(f"kayıt hatası: {e}")
@@ -237,17 +318,11 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Trade mi sohbet mi?
     if not trade_mesaji_mi(metin):
-        try:
-            konusma_res = await api_post("/api/gemini/konusma", json={"mesaj": metin})
-            cevap = konusma_res.get("cevap") if isinstance(konusma_res, dict) else None
-            if cevap:
-                await update.message.reply_text(cevap, parse_mode="Markdown")
-            else:
-                # Gemini yoksa minimal fallback
-                await update.message.reply_text("Selam! Nasılsın?")
-        except Exception as e:
-            logger.warning(f"Sohbet cevabı alınamadı: {e}")
-            await update.message.reply_text("Selam!")
+        cevap = await gemini_sohbet(metin)
+        if cevap:
+            await update.message.reply_text(cevap, parse_mode="Markdown")
+        else:
+            await update.message.reply_text("Selam! Ne var ne yok?")
         return
 
     # Yeni işlem parse et
