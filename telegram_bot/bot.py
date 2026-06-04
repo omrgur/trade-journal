@@ -25,6 +25,32 @@ client = httpx.AsyncClient(timeout=30)
 # Onay bekleyen işlemler: chat_id → işlem verisi
 pending_trades: dict[int, dict] = {}
 
+# Trade mesajı mı sohbet mi — hızlı keyword kontrolü
+TRADE_KELIMELERI = [
+    'long', 'short', 'xau', 'eur', 'gbp', 'usd', 'jpy', 'aud', 'cad', 'chf',
+    'nasdaq', 'sp500', 'dax', 'btc', 'eth', 'crypto',
+    'rr', 'pnl', 'pip', 'lot', 'stop', 'target', 'tp', 'sl',
+    'girdim', 'çıktım', 'aldım', 'sattım', 'kapattım', 'açtım',
+    'pozisyon', 'işlem', 'trade', 'breakeven', 'hedefe', 'zarar', 'kâr', 'kar',
+    'fiyat', 'seviye', 'girişi', 'çıkışı',
+]
+
+SELAMLAMA_KELIMELERI = [
+    'selam', 'merhaba', 'hey', 'günaydın', 'iyi günler', 'naber',
+    'nasılsın', 'ne haber', 'hi', 'hello', 'good morning',
+]
+
+def trade_mesaji_mi(metin: str) -> bool:
+    """Mesajın trade girişi mi yoksa sohbet mi olduğunu tahmin eder."""
+    metin_lower = metin.lower()
+    # Çok kısa veya selamlama → sohbet
+    if len(metin.split()) <= 3:
+        return False
+    if any(s in metin_lower for s in SELAMLAMA_KELIMELERI) and len(metin.split()) <= 5:
+        return False
+    # Trade kelimesi varsa → trade
+    return any(k in metin_lower for k in TRADE_KELIMELERI)
+
 
 # ── Yardımcılar ───────────────────────────────────────────────
 
@@ -209,14 +235,28 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Tamam, iptal ettim.", reply_markup=ReplyKeyboardRemove())
             return
 
+    # Trade mi sohbet mi?
+    if not trade_mesaji_mi(metin):
+        try:
+            konusma_res = await api_post("/api/gemini/konusma", json={"mesaj": metin})
+            cevap = konusma_res.get("cevap") if isinstance(konusma_res, dict) else None
+            if cevap:
+                await update.message.reply_text(cevap, parse_mode="Markdown")
+            else:
+                # Gemini yoksa minimal fallback
+                await update.message.reply_text("Selam! Nasılsın?")
+        except Exception as e:
+            logger.warning(f"Sohbet cevabı alınamadı: {e}")
+            await update.message.reply_text("Selam!")
+        return
+
     # Yeni işlem parse et
     try:
         parsed = await api_post("/api/claude/parse", json={"mesaj": metin})
     except Exception as e:
         logger.error(f"parse hatası: {e}")
         await update.message.reply_text(
-            "Anlayamadım. İşlemi biraz daha açar mısın?\n\n"
-            "_Örnek: XAUUSD long, 2650'den 2670'de çıktım, 2RR_",
+            "Anlayamadım. İşlemi biraz daha açar mısın?",
             parse_mode="Markdown"
         )
         return
