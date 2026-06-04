@@ -183,12 +183,22 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pnl = sonuc.get("pnl")
                 pnl_str = f"+{pnl}" if pnl and pnl > 0 else str(pnl) if pnl is not None else "?"
                 emoji = "✅" if pnl and float(pnl) > 0 else "❌"
+                # Kısa onay
                 await update.message.reply_text(
-                    f"{emoji} *Kaydedildi.*\n\n"
-                    f"{sonuc.get('enstruman', '?')} {(sonuc.get('yon') or '').upper()} | `{pnl_str}`",
+                    f"{emoji} *Kaydedildi.* {sonuc.get('enstruman', '?')} {(sonuc.get('yon') or '').upper()} | `{pnl_str}`",
                     parse_mode="Markdown",
                     reply_markup=ReplyKeyboardRemove()
                 )
+
+                # Gemini karakter cevabı
+                try:
+                    gemini_res = await api_post("/api/gemini/islem-sonrasi", json={"islem": sonuc})
+                    karakter_mesaj = gemini_res.get("mesaj") if isinstance(gemini_res, dict) else None
+                    if karakter_mesaj:
+                        await update.message.reply_text(karakter_mesaj, parse_mode="Markdown")
+                except Exception as ge:
+                    logger.warning(f"Gemini karakter cevabı alınamadı: {ge}")
+
             except Exception as e:
                 logger.error(f"kayıt hatası: {e}")
                 await update.message.reply_text("❌ Kayıt sırasında hata oluştu.", reply_markup=ReplyKeyboardRemove())
