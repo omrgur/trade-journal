@@ -1,11 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  --background: #030712;
-  --foreground: #f9fafb;
+  --bg: #080b14;
+  --surface: #0f1320;
+  --card: #131829;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.14);
+  --text: #eef0f6;
+  --muted: #4b5471;
+  --positive: #00e5a0;
+  --negative: #ff4d6d;
+  --accent: #7c6af7;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans, system-ui, sans-serif);
 }
+
+/* Gradient background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 600px;
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124, 106, 247, 0.12), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #1e2438; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3050; }
+
+/* Card hover glow */
+.card-glow:hover {
+  box-shadow: 0 0 0 1px rgba(124, 106, 247, 0.2), 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Stat card gradient */
+.stat-positive { background: linear-gradient(135deg, rgba(0, 229, 160, 0.08), transparent); }
+.stat-negative { background: linear-gradient(135deg, rgba(255, 77, 109, 0.08), transparent); }
+.stat-neutral  { background: linear-gradient(135deg, rgba(124, 106, 247, 0.08), transparent); }
+
+/* Long/Short badges */
+.badge-long {
+  background: linear-gradient(135deg, rgba(0, 229, 160, 0.15), rgba(0, 229, 160, 0.05));
+  color: #00e5a0;
+  border: 1px solid rgba(0, 229, 160, 0.2);
+}
+.badge-short {
+  background: linear-gradient(135deg, rgba(255, 77, 109, 0.15), rgba(255, 77, 109, 0.05));
+  color: #ff4d6d;
+  border: 1px solid rgba(255, 77, 109, 0.2);
+}
+
+/* Table row hover */
+.table-row:hover { background: rgba(124, 106, 247, 0.04); }
+
+/* Input focus */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: rgba(124, 106, 247, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(124, 106, 247, 0.1);
+}
+
+/* Smooth transitions */
+* { transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s; }
+button { transition: all 0.15s; }
