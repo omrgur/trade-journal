@@ -1,17 +1,19 @@
 import { supabaseAdmin } from '@/lib/supabase'
-import { getKoclukAnalizi } from '@/lib/claude'
+import { getSonrasıSoruları } from '@/lib/claude'
+import type { Islem } from '@/lib/types'
 
 export async function GET() {
   const db = supabaseAdmin()
-
-  const { data: islemler, error } = await db
+  const { data: islemler } = await db
     .from('islemler')
     .select('*')
     .order('tarih_saat', { ascending: false })
-    .limit(20)
+    .limit(1)
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  if (!islemler || islemler.length === 0) {
+    return Response.json({ sorular: [], analiz: 'Henüz işlem yok.' })
+  }
 
-  const sonuc = await getKoclukAnalizi(islemler ?? [])
-  return Response.json(sonuc)
+  const sorular = await getSonrasıSoruları(islemler[0] as Islem)
+  return Response.json({ sorular, analiz: '' })
 }
