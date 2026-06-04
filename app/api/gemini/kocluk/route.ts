@@ -5,7 +5,7 @@ export async function GET() {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     return Response.json({
-      error: 'GEMINI_API_KEY ayarlanmamış. aistudio.google.com adresinden ücretsiz alabilirsiniz.',
+      error: 'GEMINI_API_KEY ayarlanmamış.',
       analiz: '',
       sorular: [],
     }, { status: 500 })
@@ -34,21 +34,26 @@ export async function GET() {
     notlar: i.notlar,
   }))
 
-  const prompt = `Sen bir trading psikolojisi ve davranış koçusun. Teknik analiz değil, trader'ın zihinsel ve davranışsal kalıplarını analiz ediyorsun.
+  const prompt = `Sen bir trading psikolojisi koçusun. Samimi, senli konuşursun. Şeker yok — iyi şeyleri de söylersin, hataları da. Teknik analiz değil, tamamen psikoloji ve davranış odaklısın.
 
 Trader'ın son işlemleri:
 ${JSON.stringify(ozet, null, 2)}
 
-Şunlara odaklan:
-1. **Davranış kalıpları**: Kayıplardan sonra nasıl davranıyor? Kazançlarda aşırı güven var mı?
-2. **Disiplin**: Risk yönetimi tutarlı mı? Plan dışı işlem alıyor mu?
-3. **Psikolojik tuzaklar**: FOMO, intikam işlemi, erken çıkış gibi kalıplar görünüyor mu?
-4. **Güçlü yönler**: Psikolojik açıdan neyi iyi yapıyor?
-5. **Gelişim önerileri**: Zihinsel olarak ne üzerinde çalışmalı?
+Şu sırayla yaz:
 
-Türkçe, samimi ve yapıcı bir dille yaz. Teknik strateji yorumu yapma, sadece psikoloji ve davranış.
+**Direkt gözlemlerim:**
+Gördüğün davranış kalıplarını net söyle. Disiplin var mı yok mu, tekrar eden hatalar var mı, kazançlarda ne oluyor, kayıplarda ne oluyor. Örnek ver, işlemlere referans ver.
 
-Son olarak, trader'ın kendi kendine sorması gereken 3 psikolojik soru sor (sadece soru, cevap verme).`
+**Güçlü yönlerin:**
+Ne yapıyorsun ki işe yarıyor. Bu kısmı atlama — sadece eleştiri değil, neyin işe yaradığını da bilmesi lazım.
+
+**Çalışman gereken alan:**
+Bir tane, en kritik olanı. Hepsini aynı anda sıralama.
+
+**Sana 3 sorum var:**
+Trader'ın kendi kendine dürüstçe cevaplaması gereken 3 soru. Rahatsız edici olabilir — olsun.
+
+Türkçe, samimi, direkt. Uzun akademik paragraflar değil — kısa, net, dürüst.`
 
   const result = await model.generateContent(prompt)
   const text = result.response.text()
