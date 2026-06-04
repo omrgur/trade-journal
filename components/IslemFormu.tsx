@@ -23,14 +23,14 @@ const BOS_FORM = {
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-medium text-[#4b5471] mb-1.5 uppercase tracking-wider">{children}</label>
+  return <label className="block text-xs font-medium text-[#8892a4] mb-1.5 uppercase tracking-wider">{children}</label>
 }
 
-function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+function FieldInput({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded-xl border border-white/[0.08] bg-[#0d1019] px-3.5 py-2.5 text-sm text-white placeholder:text-[#2a3050] hover:border-white/[0.14] ${props.className ?? ''}`}
+      className={`w-full rounded-xl border border-[#e4e8f0] bg-white px-3.5 py-2.5 text-sm text-[#0f1117] placeholder:text-[#b8c0cc] hover:border-[#c8d0e4] ${props.className ?? ''}`}
     />
   )
 }
@@ -130,14 +130,14 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-[#0f1320] border border-white/[0.08] rounded-2xl w-full max-w-lg my-8 shadow-2xl shadow-black/60">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white border border-[#e4e8f0] rounded-2xl w-full max-w-lg my-8 shadow-2xl shadow-black/10">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
-          <h2 className="font-semibold text-white">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#f0f2f8]">
+          <h2 className="font-semibold text-[#0f1117]">
             {mevcutIslem ? 'İşlemi Düzenle' : 'Yeni İşlem'}
           </h2>
-          <button onClick={onKapat} className="text-[#4b5471] hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06]">
+          <button onClick={onKapat} className="text-[#b8c0cc] hover:text-[#0f1117] w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#f4f6fb] text-sm">
             ✕
           </button>
         </div>
@@ -145,8 +145,8 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
         <form onSubmit={kaydet} className="px-6 py-5 space-y-5">
           {/* AI Parse */}
           {!mevcutIslem && (
-            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3.5">
-              <p className="text-xs text-violet-400 mb-2.5 font-medium">✨ Metinden otomatik doldur</p>
+            <div className="rounded-xl border border-[#e0deff] bg-[#f5f4ff] p-3.5">
+              <p className="text-xs text-[#5b50e8] mb-2.5 font-medium">✨ Metinden otomatik doldur</p>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -154,13 +154,13 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
                   value={mesajParse}
                   onChange={(e) => setMesajParse(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), mesajdanDoldur())}
-                  className="flex-1 rounded-lg bg-[#0a0d18] border border-white/[0.06] px-3 py-2 text-xs text-gray-300 placeholder:text-[#2a3050]"
+                  className="flex-1 rounded-lg bg-white border border-[#e0deff] px-3 py-2 text-xs text-[#0f1117] placeholder:text-[#b8c0cc]"
                 />
                 <button
                   type="button"
                   onClick={mesajdanDoldur}
                   disabled={parseEdiliyor}
-                  className="rounded-lg bg-violet-600/80 px-3 py-2 text-xs font-medium text-white hover:bg-violet-600 disabled:opacity-50 whitespace-nowrap"
+                  className="rounded-lg bg-[#5b50e8] px-3 py-2 text-xs font-medium text-white hover:bg-[#4a40d4] disabled:opacity-50 whitespace-nowrap"
                 >
                   {parseEdiliyor ? '...' : 'Doldur'}
                 </button>
@@ -172,11 +172,11 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Enstrüman *</Label>
-              <Input required placeholder="XAUUSD" value={form.enstruman} onChange={(e) => set('enstruman', e.target.value.toUpperCase())} />
+              <FieldInput required placeholder="XAUUSD" value={form.enstruman} onChange={(e) => set('enstruman', e.target.value.toUpperCase())} />
             </div>
             <div>
               <Label>Yön *</Label>
-              <div className="flex rounded-xl overflow-hidden border border-white/[0.08]">
+              <div className="flex rounded-xl overflow-hidden border border-[#e4e8f0]">
                 {(['long', 'short'] as const).map((y) => (
                   <button
                     key={y}
@@ -184,8 +184,10 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
                     onClick={() => set('yon', y)}
                     className={`flex-1 py-2.5 text-sm font-semibold transition-all ${
                       form.yon === y
-                        ? y === 'long' ? 'bg-[#00e5a0]/15 text-[#00e5a0]' : 'bg-[#ff4d6d]/15 text-[#ff4d6d]'
-                        : 'bg-[#0d1019] text-[#4b5471] hover:text-white'
+                        ? y === 'long'
+                          ? 'bg-[#ecfdf5] text-[#059669]'
+                          : 'bg-[#fef2f2] text-[#dc2626]'
+                        : 'bg-white text-[#8892a4] hover:text-[#0f1117]'
                     }`}
                   >
                     {y === 'long' ? '▲ Long' : '▼ Short'}
@@ -198,7 +200,7 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
           {/* Tarih */}
           <div>
             <Label>Tarih & Saat</Label>
-            <Input type="datetime-local" value={form.tarih_saat} onChange={(e) => set('tarih_saat', e.target.value)} />
+            <FieldInput type="datetime-local" value={form.tarih_saat} onChange={(e) => set('tarih_saat', e.target.value)} />
           </div>
 
           {/* Fiyatlar */}
@@ -210,7 +212,7 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
             ].map(({ alan, label }) => (
               <div key={alan}>
                 <Label>{label}</Label>
-                <Input type="number" step="any" placeholder="0.00" value={form[alan]} onChange={(e) => set(alan, e.target.value)} />
+                <FieldInput type="number" step="any" placeholder="0.00" value={form[alan]} onChange={(e) => set(alan, e.target.value)} />
               </div>
             ))}
           </div>
@@ -219,18 +221,18 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>PnL</Label>
-              <Input type="number" step="any" placeholder="0.00" value={form.pnl} onChange={(e) => set('pnl', e.target.value)} />
+              <FieldInput type="number" step="any" placeholder="0.00" value={form.pnl} onChange={(e) => set('pnl', e.target.value)} />
             </div>
             <div>
               <Label>RR Oranı</Label>
-              <Input type="number" step="0.1" placeholder="2.0" value={form.rr_orani} onChange={(e) => set('rr_orani', e.target.value)} />
+              <FieldInput type="number" step="0.1" placeholder="2.0" value={form.rr_orani} onChange={(e) => set('rr_orani', e.target.value)} />
             </div>
           </div>
 
           {/* Hesap türü */}
           <div>
             <Label>Hesap Türü</Label>
-            <div className="flex rounded-xl overflow-hidden border border-white/[0.08]">
+            <div className="flex rounded-xl overflow-hidden border border-[#e4e8f0]">
               {[
                 { val: '' as const, label: 'Seçilmedi' },
                 { val: 'prop' as const, label: 'Prop' },
@@ -242,8 +244,8 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
                   onClick={() => set('hesap_turu', val)}
                   className={`flex-1 py-2.5 text-xs font-medium transition-all ${
                     form.hesap_turu === val
-                      ? 'bg-violet-600/20 text-violet-300'
-                      : 'bg-[#0d1019] text-[#4b5471] hover:text-white'
+                      ? 'bg-[#f0effd] text-[#5b50e8]'
+                      : 'bg-white text-[#8892a4] hover:text-[#0f1117]'
                   }`}
                 >
                   {label}
@@ -257,16 +259,16 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
             <Label>Chart Görseli</Label>
             <input type="file" accept="image/*" ref={dosyaRef} onChange={gorselSec} className="hidden" />
             {gorselUrl ? (
-              <div className="flex items-center gap-2 rounded-xl border border-[#00e5a0]/20 bg-[#00e5a0]/5 px-4 py-2.5">
-                <span className="text-[#00e5a0] text-xs flex-1">✓ Görsel yüklendi</span>
-                <button type="button" onClick={() => setGorselUrl('')} className="text-[#4b5471] hover:text-red-400 text-xs">Kaldır</button>
+              <div className="flex items-center gap-2 rounded-xl border border-[#a7f3d0] bg-[#ecfdf5] px-4 py-2.5">
+                <span className="text-[#059669] text-xs flex-1">✓ Görsel yüklendi</span>
+                <button type="button" onClick={() => setGorselUrl('')} className="text-[#b8c0cc] hover:text-[#dc2626] text-xs">Kaldır</button>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => dosyaRef.current?.click()}
                 disabled={gorselYukleniyor}
-                className="w-full rounded-xl border border-dashed border-white/[0.08] px-4 py-3.5 text-sm text-[#4b5471] hover:text-white hover:border-white/[0.2] disabled:opacity-50 text-center"
+                className="w-full rounded-xl border border-dashed border-[#e4e8f0] px-4 py-3.5 text-sm text-[#8892a4] hover:text-[#0f1117] hover:border-[#c8d0e4] disabled:opacity-50 text-center"
               >
                 {gorselYukleniyor ? 'Yükleniyor...' : '📎  Görsel Seç (PNG, JPG)'}
               </button>
@@ -281,25 +283,24 @@ export default function IslemFormu({ mevcutIslem, onKapat, onKayit }: Props) {
               placeholder="İşlemle ilgili notlarınız..."
               value={form.notlar}
               onChange={(e) => set('notlar', e.target.value)}
-              className="w-full rounded-xl border border-white/[0.08] bg-[#0d1019] px-3.5 py-2.5 text-sm text-white placeholder:text-[#2a3050] resize-none hover:border-white/[0.14]"
+              className="w-full rounded-xl border border-[#e4e8f0] bg-white px-3.5 py-2.5 text-sm text-[#0f1117] placeholder:text-[#b8c0cc] resize-none hover:border-[#c8d0e4]"
             />
           </div>
 
-          {hata && <p className="text-[#ff4d6d] text-sm">{hata}</p>}
+          {hata && <p className="text-[#dc2626] text-sm">{hata}</p>}
 
-          {/* Buttons */}
           <div className="flex gap-3 pt-1">
             <button
               type="button"
               onClick={onKapat}
-              className="flex-1 rounded-xl border border-white/[0.08] py-2.5 text-sm text-[#4b5471] hover:text-white hover:border-white/[0.16]"
+              className="flex-1 rounded-xl border border-[#e4e8f0] py-2.5 text-sm text-[#8892a4] hover:text-[#0f1117] hover:border-[#c8d0e4]"
             >
               İptal
             </button>
             <button
               type="submit"
               disabled={kaydediliyor}
-              className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-2.5 text-sm font-semibold text-white hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 shadow-lg shadow-violet-500/20"
+              className="flex-1 rounded-xl bg-[#5b50e8] py-2.5 text-sm font-semibold text-white hover:bg-[#4a40d4] disabled:opacity-50 shadow-sm shadow-[#5b50e8]/20"
             >
               {kaydediliyor ? 'Kaydediliyor...' : mevcutIslem ? 'Güncelle' : 'Kaydet'}
             </button>

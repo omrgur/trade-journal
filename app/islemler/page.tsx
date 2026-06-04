@@ -6,10 +6,10 @@ import type { Islem } from '@/lib/types'
 import IslemFormu from '@/components/IslemFormu'
 
 function PnlText({ pnl }: { pnl: number | null }) {
-  if (pnl === null) return <span className="text-[#4b5471]">—</span>
+  if (pnl === null) return <span className="text-[#b8c0cc]">—</span>
   const pos = pnl > 0
   return (
-    <span className={`font-semibold tabular-nums ${pos ? 'text-[#00e5a0]' : pnl < 0 ? 'text-[#ff4d6d]' : 'text-[#4b5471]'}`}>
+    <span className={`font-semibold tabular-nums ${pos ? 'text-[#059669]' : pnl < 0 ? 'text-[#dc2626]' : 'text-[#8892a4]'}`}>
       {pos ? '+' : ''}{pnl}
     </span>
   )
@@ -17,16 +17,21 @@ function PnlText({ pnl }: { pnl: number | null }) {
 
 function YonBadge({ yon }: { yon: string }) {
   return yon === 'long'
-    ? <span className="badge-long rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide">LONG</span>
-    : <span className="badge-short rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide">SHORT</span>
+    ? <span className="badge-long rounded-md px-2 py-0.5 text-xs font-semibold">LONG</span>
+    : <span className="badge-short rounded-md px-2 py-0.5 text-xs font-semibold">SHORT</span>
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string; variant?: string }) {
+function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'green' | 'red' | 'default' }) {
+  const valueColor =
+    accent === 'green' ? 'text-[#059669]' :
+    accent === 'red' ? 'text-[#dc2626]' :
+    'text-[#0f1117]'
+
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-[#0f1320] p-5 hover:border-white/[0.12] transition-all">
-      <p className="text-xs font-medium text-[#4b5471] uppercase tracking-wider mb-2">{label}</p>
-      <p className="text-2xl font-bold text-white tracking-tight">{value}</p>
-      {sub && <p className="text-xs text-[#4b5471] mt-1">{sub}</p>}
+    <div className="card rounded-2xl border border-[#e4e8f0] bg-white p-5 hover:border-[#c8d0e4]">
+      <p className="text-xs font-medium text-[#8892a4] uppercase tracking-wider mb-2">{label}</p>
+      <p className={`text-2xl font-bold tracking-tight ${valueColor}`}>{value}</p>
+      {sub && <p className="text-xs text-[#b8c0cc] mt-1">{sub}</p>}
     </div>
   )
 }
@@ -65,10 +70,11 @@ export default function IslemlerPage() {
           label="Toplam PnL"
           value={`${toplamPnl > 0 ? '+' : ''}${toplamPnl.toFixed(2)}`}
           sub={`${islemler.length} işlem`}
+          accent={toplamPnl > 0 ? 'green' : toplamPnl < 0 ? 'red' : 'default'}
         />
         <StatCard
           label="Win Rate"
-          value={`%${winRate}`}
+          value={winRate === '—' ? '—' : `%${winRate}`}
           sub={`${kazanan} kazanan`}
         />
         <StatCard
@@ -78,16 +84,16 @@ export default function IslemlerPage() {
         />
         <StatCard
           label="Kazanan / Kaybeden"
-          value={`${kazanan} / ${islemler.length - kazanan}`}
+          value={islemler.length > 0 ? `${kazanan} / ${islemler.length - kazanan}` : '— / —'}
           sub="bu dönem"
         />
       </div>
 
-      {/* Header + filters */}
+      {/* Header + controls */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-white">İşlem Geçmişi</h1>
-          <span className="rounded-full border border-white/[0.08] px-2.5 py-0.5 text-xs text-[#4b5471]">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-base font-semibold text-[#0f1117]">İşlem Geçmişi</h1>
+          <span className="rounded-full border border-[#e4e8f0] px-2.5 py-0.5 text-xs text-[#8892a4]">
             {islemler.length}
           </span>
         </div>
@@ -95,7 +101,7 @@ export default function IslemlerPage() {
           <select
             value={filtreler.hesap}
             onChange={(e) => setFiltreler((f) => ({ ...f, hesap: e.target.value }))}
-            className="rounded-xl border border-white/[0.08] bg-[#0f1320] px-3 py-2 text-xs text-[#4b5471] hover:border-white/[0.14]"
+            className="rounded-xl border border-[#e4e8f0] bg-white px-3 py-2 text-xs text-[#8892a4] hover:border-[#c8d0e4]"
           >
             <option value="">Tüm Hesaplar</option>
             <option value="prop">Prop</option>
@@ -106,14 +112,14 @@ export default function IslemlerPage() {
             placeholder="Enstrüman..."
             value={filtreler.enstruman}
             onChange={(e) => setFiltreler((f) => ({ ...f, enstruman: e.target.value }))}
-            className="rounded-xl border border-white/[0.08] bg-[#0f1320] px-3 py-2 text-xs text-[#4b5471] placeholder:text-[#2a3050] w-32 hover:border-white/[0.14]"
+            className="rounded-xl border border-[#e4e8f0] bg-white px-3 py-2 text-xs text-[#0f1117] placeholder:text-[#b8c0cc] w-32 hover:border-[#c8d0e4]"
           />
           <button
             onClick={() => setFormAcik(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-violet-500/20 hover:from-violet-500 hover:to-purple-500"
+            className="flex items-center gap-1.5 rounded-xl bg-[#5b50e8] px-4 py-2 text-sm font-medium text-white hover:bg-[#4a40d4] shadow-sm shadow-[#5b50e8]/20"
           >
             <span className="text-base leading-none">+</span>
-            <span>Yeni İşlem</span>
+            Yeni İşlem
           </button>
         </div>
       </div>
@@ -121,46 +127,43 @@ export default function IslemlerPage() {
       {/* Table */}
       {yukleniyor ? (
         <div className="flex items-center justify-center py-24">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#5b50e8] border-t-transparent" />
         </div>
       ) : islemler.length === 0 ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-[#0f1320] py-20 text-center">
-          <p className="text-4xl mb-4">📊</p>
-          <p className="text-white font-medium mb-1">Henüz işlem yok</p>
-          <p className="text-sm text-[#4b5471]">
+        <div className="card rounded-2xl border border-[#e4e8f0] bg-white py-20 text-center">
+          <p className="text-3xl mb-4">📊</p>
+          <p className="text-[#0f1117] font-medium mb-1">Henüz işlem yok</p>
+          <p className="text-sm text-[#8892a4]">
             &ldquo;+ Yeni İşlem&rdquo; ile ekleyebilir veya Telegram botunuzu kullanabilirsiniz.
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/[0.07] bg-[#0f1320] overflow-hidden">
+        <div className="card rounded-2xl border border-[#e4e8f0] bg-white overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/[0.05]">
+              <tr className="border-b border-[#f0f2f8]">
                 {['Tarih', 'Enstrüman', 'Yön', 'Giriş', 'Çıkış', 'PnL', 'RR', 'Hesap', ''].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#2a3050] uppercase tracking-wider">
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#b8c0cc] uppercase tracking-wider">
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {islemler.map((islem, i) => (
-                <tr
-                  key={islem.id}
-                  className={`table-row border-b border-white/[0.04] last:border-0 cursor-pointer ${i % 2 === 0 ? '' : 'bg-white/[0.01]'}`}
-                >
-                  <td className="px-4 py-3.5 text-[#4b5471] text-xs whitespace-nowrap">
+              {islemler.map((islem) => (
+                <tr key={islem.id} className="table-row border-b border-[#f4f6fb] last:border-0 cursor-pointer">
+                  <td className="px-4 py-3.5 text-[#8892a4] text-xs whitespace-nowrap">
                     <Link href={`/islemler/${islem.id}`} className="block">
                       {new Date(islem.tarih_saat).toLocaleDateString('tr-TR', {
                         day: '2-digit', month: '2-digit', year: '2-digit',
-                        hour: '2-digit', minute: '2-digit'
+                        hour: '2-digit', minute: '2-digit',
                       })}
                     </Link>
                   </td>
                   <td className="px-4 py-3.5">
-                    <Link href={`/islemler/${islem.id}`} className="flex items-center gap-2">
-                      <span className="font-semibold text-white tracking-wide">{islem.enstruman}</span>
-                      {islem.chart_gorseli_url && <span className="text-[#4b5471] text-xs">📎</span>}
+                    <Link href={`/islemler/${islem.id}`} className="flex items-center gap-1.5">
+                      <span className="font-semibold text-[#0f1117] tracking-wide">{islem.enstruman}</span>
+                      {islem.chart_gorseli_url && <span className="text-[#b8c0cc] text-xs">📎</span>}
                     </Link>
                   </td>
                   <td className="px-4 py-3.5">
@@ -168,10 +171,10 @@ export default function IslemlerPage() {
                       <YonBadge yon={islem.yon} />
                     </Link>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-[#4b5471] tabular-nums">
+                  <td className="px-4 py-3.5 text-right text-[#8892a4] tabular-nums">
                     <Link href={`/islemler/${islem.id}`} className="block">{islem.giris_fiyati ?? '—'}</Link>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-[#4b5471] tabular-nums">
+                  <td className="px-4 py-3.5 text-right text-[#8892a4] tabular-nums">
                     <Link href={`/islemler/${islem.id}`} className="block">{islem.cikis_fiyati ?? '—'}</Link>
                   </td>
                   <td className="px-4 py-3.5 text-right">
@@ -179,7 +182,7 @@ export default function IslemlerPage() {
                       <PnlText pnl={islem.pnl} />
                     </Link>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-[#4b5471] tabular-nums">
+                  <td className="px-4 py-3.5 text-right text-[#8892a4] tabular-nums">
                     <Link href={`/islemler/${islem.id}`} className="block">
                       {islem.rr_orani ? `${islem.rr_orani}R` : '—'}
                     </Link>
@@ -189,16 +192,16 @@ export default function IslemlerPage() {
                       {islem.hesap_turu ? (
                         <span className={`rounded-md px-2 py-0.5 text-xs font-medium border ${
                           islem.hesap_turu === 'prop'
-                            ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
-                            : 'border-purple-500/20 bg-purple-500/10 text-purple-400'
+                            ? 'border-blue-200 bg-blue-50 text-blue-600'
+                            : 'border-violet-200 bg-violet-50 text-violet-600'
                         }`}>
                           {islem.hesap_turu === 'prop' ? 'Prop' : 'Kendi'}
                         </span>
                       ) : '—'}
                     </Link>
                   </td>
-                  <td className="px-4 py-3.5 text-center">
-                    <Link href={`/islemler/${islem.id}`} className="block text-[#2a3050] hover:text-[#4b5471] text-xs">
+                  <td className="px-4 py-3.5 text-center text-xs text-[#b8c0cc]">
+                    <Link href={`/islemler/${islem.id}`} className="block">
                       {islem.kaynak === 'telegram' ? '📱' : '🖥️'}
                     </Link>
                   </td>

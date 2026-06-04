@@ -19,16 +19,13 @@ export default function NavLinks() {
           <Link
             key={href}
             href={href}
-            className={`relative px-3 py-1.5 text-sm rounded-lg transition-colors ${
+            className={`relative px-3.5 py-1.5 text-sm rounded-lg transition-colors ${
               active
-                ? 'text-white bg-white/[0.08]'
-                : 'text-[#4b5471] hover:text-white hover:bg-white/[0.04]'
+                ? 'text-[#5b50e8] bg-[#f0effd] font-medium'
+                : 'text-[#8892a4] hover:text-[#0f1117] hover:bg-[#f4f6fb]'
             }`}
           >
             {label}
-            {active && (
-              <span className="absolute inset-x-3 -bottom-[1px] h-px bg-gradient-to-r from-transparent via-violet-400 to-transparent" />
-            )}
           </Link>
         )
       })}
