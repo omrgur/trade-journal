@@ -66,7 +66,7 @@ async def gemini_sohbet(mesaj: str) -> str | None:
         return None
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-pro",
             system_instruction=SOHBET_KARAKTERI
         )
         response = await asyncio.get_event_loop().run_in_executor(
@@ -91,7 +91,7 @@ async def gemini_koc_yorum(islem_ozet: str) -> str | None:
     )
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-pro",
             system_instruction=koc_karakteri
         )
         response = await asyncio.get_event_loop().run_in_executor(
