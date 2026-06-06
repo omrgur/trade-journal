@@ -41,13 +41,21 @@ export async function parseTradeMesaji(mesaj: string): Promise<ParsedIslem> {
   return parsed as ParsedIslem
 }
 
-export async function gorseldenIslemCikar(gorselUrl: string, caption?: string): Promise<ParsedIslem> {
+type GorselKaynak =
+  | { base64: string; mediaType: string }
+  | { url: string }
+
+export async function gorseldenIslemCikar(gorsel: GorselKaynak, caption?: string): Promise<ParsedIslem> {
+  const imageSource = 'base64' in gorsel
+    ? { type: 'base64' as const, media_type: gorsel.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: gorsel.base64 }
+    : { type: 'url' as const, url: gorsel.url }
+
   const metinKismi = `Bu bir TradingView chart görseli. Aşağıdakileri bul ve JSON döndür:
 
-1. ENSTRÜMAN: Chartin sol üst köşesinde veya başlığında yazıyor (örn: XAUUSD, NAS100, EURUSD, GBPUSD, US30, BTCUSD). Tam olarak oku, tahmin etme.
-2. YÖN: İşaret (ok, entry marker) veya pozisyon kutusu long mu short mu gösteriyor?
-3. GİRİŞ/ÇIKIŞ FİYATI: Yatay çizgiler veya etiketlerde görünüyorsa yaz.
-4. PnL / RR: Chart üzerinde veya panelde yazıyorsa yaz.
+1. ENSTRÜMAN: Sol üst köşede veya başlıkta yazar (XAUUSD, NAS100, EURUSD, GBPUSD, US30, BTCUSD vb). Göremiyorsan null yaz.
+2. YÖN: Entry marker, ok veya pozisyon kutusu long mu short mu gösteriyor? Emin değilsen null yaz.
+3. GİRİŞ/ÇIKIŞ FİYATI: Yatay çizgi etiketlerinde görünüyorsa yaz, yoksa null.
+4. PnL / RR: Chart veya panelde yazıyorsa yaz, yoksa null.
 ${caption ? `\nKullanıcının notu: "${caption}"` : ''}`
 
   const response = await client.messages.create({
@@ -57,7 +65,7 @@ ${caption ? `\nKullanıcının notu: "${caption}"` : ''}`
     messages: [{
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'url', url: gorselUrl } },
+        { type: 'image', source: imageSource },
         { type: 'text', text: metinKismi },
       ],
     }],
