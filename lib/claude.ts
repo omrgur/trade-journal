@@ -58,12 +58,13 @@ export async function gorseldenIslemCikar(gorsel: GorselKaynak, caption?: string
 
   const metinKismi = `Bu bir TradingView chart görseli. Aşağıdakileri bul ve JSON döndür:
 
-1. ENSTRÜMAN: Sol üst köşede veya başlıkta yazar (NAS100, XAUUSD, EURUSD, US30 vb). Göremiyorsan null yaz.
-2. YÖN: Entry marker, ok veya pozisyon kutusu long mu short mu? Emin değilsen null yaz.
+1. ENSTRÜMAN: Önce görselde ara (sol üst köşe, başlık, sembol etiketi). Görselde yoksa kullanıcının notuna bak. İkisinde de yoksa null yaz.
+   Normalize et: Nasdaq/NASDAQ/NAS100/US100 → NAS100 | Gold/XAUUSD/XAU → XAUUSD | DOW/US30 → US30
+2. YÖN: Entry marker, ok veya pozisyon kutusu long mu short mu? Kullanıcının notunda "long"/"short"/"al"/"sat" varsa oradan al. Emin değilsen null.
 3. GİRİŞ FİYATI: Entry seviyesi yatay çizgide veya etikette yazıyorsa.
 4. ÇIKIŞ FİYATI: TP (Take Profit) çizgisi veya etiketi varsa.
-5. STOP LOSS: SL çizgisi veya etiketi varsa giris_fiyati değil, notlar alanına "SL: X" formatında ekle.
-6. PnL / RR: Chart veya strateji panelinde yazıyorsa.
+5. STOP LOSS: SL çizgisi veya etiketi varsa notlar alanına "SL: X" formatında ekle.
+6. PnL / RR: Chart veya strateji panelinde yazıyorsa. Kullanıcının notunda "8rr", "+250$" gibi ifadeler varsa çıkar.
 ${caption ? `\nKullanıcının notu: "${caption}"` : ''}
 
 ÖNEMLİ: Göremediğin alanları null yaz, tahmin etme.`

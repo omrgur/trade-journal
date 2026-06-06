@@ -499,6 +499,21 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption_parse = await api_post("/api/claude/parse", json={"mesaj": caption})
             except Exception:
                 pass
+            # Fallback: caption'da bilinen enstruman anahtar kelimeleri direkt tara
+            if not caption_parse.get("enstruman"):
+                caption_lower = caption.lower()
+                _ENSTRU_MAP = {
+                    "nasdaq": "NAS100", "nas100": "NAS100", "us100": "NAS100",
+                    "xauusd": "XAUUSD", "gold": "XAUUSD", "altın": "XAUUSD", "xau": "XAUUSD",
+                    "dow": "US30", "us30": "US30", "dj30": "US30",
+                    "sp500": "SPX500", "spx": "SPX500", "s&p": "SPX500",
+                    "eurusd": "EURUSD", "gbpusd": "GBPUSD", "usdjpy": "USDJPY",
+                    "btc": "BTCUSD", "btcusd": "BTCUSD", "eth": "ETHUSD",
+                }
+                for anahtar, deger in _ENSTRU_MAP.items():
+                    if anahtar in caption_lower:
+                        caption_parse["enstruman"] = deger
+                        break
 
         # 4. Hesap eşleştir — her iki kaynaktan gelen isimler birleştirilerek
         hesaplar = await api_get("/api/hesaplar")
