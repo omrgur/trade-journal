@@ -4,6 +4,7 @@ Koç + asistan kişiliği, Gemini direkt entegrasyon
 """
 import os
 import re
+import json
 import base64
 import logging
 import asyncio
@@ -25,7 +26,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-client = httpx.AsyncClient(timeout=30)
+client = httpx.AsyncClient(timeout=60)
 
 # Gemini kurulumu
 if GEMINI_API_KEY:
@@ -48,14 +49,58 @@ Hitap: "kardeşim", "reis", "dostum", "abi" — sadece doğal geldiğinde, her c
 
 Kesinlikle yapma: Format verme. Örnek verme. Aynı cümleyi tekrar kullanma. Kalıp robot yanıtlar verme. Selamlama mesajına işlem sorma."""
 
+# Enstrüman normalize map — module seviyesinde
+_ENSTRU_MAP: dict[str, str] = {
+    "nasdaq": "NAS100", "nas100": "NAS100", "us100": "NAS100",
+    "xauusd": "XAUUSD", "gold": "XAUUSD", "altın": "XAUUSD", "xau": "XAUUSD",
+    "dow": "US30", "us30": "US30", "dj30": "US30",
+    "sp500": "SPX500", "spx": "SPX500", "s&p": "SPX500",
+    "eurusd": "EURUSD", "gbpusd": "GBPUSD", "usdjpy": "USDJPY",
+    "gbpjpy": "GBPJPY", "audusd": "AUDUSD", "usdcad": "USDCAD",
+    "btc": "BTCUSD", "btcusd": "BTCUSD", "eth": "ETHUSD", "ethusd": "ETHUSD",
+    "dax": "DAX40", "dax40": "DAX40", "ftse": "FTSE100",
+}
+
+def _normalize_enstruman(text: str) -> str | None:
+    tl = text.lower().strip()
+    for k, v in _ENSTRU_MAP.items():
+        if k in tl:
+            return v
+    return None
+
+def _detect_yon(text: str) -> str | None:
+    tl = text.lower()
+    if re.search(r'\bshort\b|sattım|sat(?:\s|$)', tl):
+        return "short"
+    if re.search(r'\blong\b|aldım|al(?:\s|$)', tl):
+        return "long"
+    return None
+
+# ── Persistence — fotoğraf pending state dosyaya yazılır ──────
+_PENDING_FILE = "/tmp/tj_pending.json"
+
+def _pending_load() -> dict[int, dict]:
+    try:
+        with open(_PENDING_FILE) as f:
+            return {int(k): v for k, v in json.load(f).items()}
+    except Exception:
+        return {}
+
+def _pending_dump(data: dict[int, dict]):
+    try:
+        with open(_PENDING_FILE, "w") as f:
+            json.dump({str(k): v for k, v in data.items()}, f)
+    except Exception as e:
+        logger.warning(f"pending dump hatası: {e}")
+
 # Onay bekleyen işlemler: chat_id → işlem verisi
 pending_trades: dict[int, dict] = {}
 
 # Per-user sohbet geçmişi: chat_id → Gemini history listesi
 chat_gecmisleri: dict[int, list] = {}
 
-# Parite beklenen tamamlanmamış fotoğraf işlemleri: chat_id → kısmi işlem verisi
-pending_fotograflar: dict[int, dict] = {}
+# Tamamlanmamış fotoğraf işlemleri — dosyadan yükle (restart'a karşı dayanıklı)
+pending_fotograflar: dict[int, dict] = _pending_load()
 
 
 # ── Gemini direkt fonksiyonları ──────────────────────────────
@@ -83,6 +128,52 @@ async def gemini_sohbet(chat_id: int, mesaj: str) -> str | None:
         if "429" in str(e) or "quota" in str(e).lower() or "rate" in str(e).lower():
             return None  # Sessiz düş, fallback göster
         return None
+
+
+async def gemini_gorsel_analiz(foto_bytes: bytes, caption: str = "") -> dict:
+    """Gemini 2.5 Pro vision ile chart görselini analiz et."""
+    if not GEMINI_API_KEY:
+        return {}
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-pro",
+            system_instruction=(
+                "Sen bir trading asistanısın. TradingView chart görselinden işlem bilgilerini çıkar. "
+                "SADECE geçerli JSON döndür, başka hiçbir şey yazma. "
+                "Göremediğin alanları null yaz, tahmin etme. "
+                "Enstrüman normalize et: NASDAQ/US100/NAS100→NAS100, GOLD/XAU/XAUUSD→XAUUSD, "
+                "DOW/US30→US30, SP500/SPX→SPX500. Yon: 'long' veya 'short' (küçük harf)."
+            )
+        )
+        foto_b64 = base64.b64encode(foto_bytes).decode()
+        prompt = (
+            'Chart görselinden şu JSON\'u doldur:\n'
+            '{"enstruman":null,"yon":null,"giris_fiyati":null,"cikis_fiyati":null,'
+            '"breakeven_fiyati":null,"pnl":null,"rr_orani":null,"hesap_isimleri":[],"notlar":null}\n\n'
+            'Enstrüman: sol üstte veya başlıkta yazar. Yön: entry ok/marker/kutudan.\n'
+            'SL varsa notlar alanına "SL: X" yaz.\n'
+        )
+        if caption:
+            prompt += f'\nKullanıcının notu: "{caption}" — buradan da enstrüman/yön/RR/PnL çıkarabilirsin.'
+
+        response = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: model.generate_content([
+                {"inline_data": {"mime_type": "image/jpeg", "data": foto_b64}},
+                prompt,
+            ])
+        )
+        json_match = re.search(r'\{[\s\S]*\}', response.text)
+        if json_match:
+            result = json.loads(json_match.group())
+            if not isinstance(result.get("hesap_isimleri"), list):
+                result["hesap_isimleri"] = []
+            if result.get("yon"):
+                result["yon"] = result["yon"].lower()
+            return result
+    except Exception as e:
+        logger.error(f"Gemini görsel analiz hatası: {e}")
+    return {}
 
 
 async def gemini_koc_yorum(islem_ozet: str) -> str | None:
@@ -337,6 +428,7 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Eksik bilgi tamamlanıyor (fotoğraf sonrası)
     if chat_id in pending_fotograflar:
         islem_data = pending_fotograflar.pop(chat_id)
+        _pending_dump(pending_fotograflar)
         parse_res: dict = {}
         try:
             parse_res = await api_post("/api/claude/parse", json={"mesaj": metin})
@@ -352,21 +444,18 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 islem_data["giris_fiyati"] = parse_res["giris_fiyati"]
             if parse_res.get("cikis_fiyati") is not None:
                 islem_data["cikis_fiyati"] = parse_res["cikis_fiyati"]
-            if parse_res.get("hesap_isimleri"):
-                h_listesi = await api_get("/api/hesaplar")
-                h_listesi = h_listesi if isinstance(h_listesi, list) else []
-                ids = hesaplari_eslestir(parse_res["hesap_isimleri"], metin, h_listesi)
-                if ids:
-                    islem_data["hesap_idleri"] = ids
+            h_listesi = await api_get("/api/hesaplar")
+            h_listesi = h_listesi if isinstance(h_listesi, list) else []
+            hesap_isimleri = parse_res.get("hesap_isimleri") or []
+            ids = hesaplari_eslestir(hesap_isimleri, metin, h_listesi)
+            if ids:
+                islem_data["hesap_idleri"] = ids
         except Exception as pe:
             logger.error(f"Fotoğraf tamamlama parse hatası: {pe}")
 
         # Keyword fallback — Claude parse yon'u kaçırsa bile "short"/"long" direkt tara
-        if not parse_res.get("yon"):
-            if "short" in metin_lower or "sat" in metin_lower:
-                islem_data["yon"] = "short"
-            elif "long" in metin_lower or "al " in metin_lower:
-                islem_data["yon"] = "long"
+        if not islem_data.get("yon"):
+            islem_data["yon"] = _detect_yon(metin)
 
         # RR fallback — "8rr", "8r", "8 rr" gibi ifadeler
         if islem_data.get("rr_orani") is None:
@@ -374,14 +463,20 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if rr_m:
                 islem_data["rr_orani"] = float(rr_m.group(1))
 
-        # PnL fallback — "+150" veya "-150" gibi işaretli sayılar
+        # PnL fallback — "+150" veya "-150" gibi işaretli sayılar (5k gibi büyük kısa ifadeler hariç)
         if islem_data.get("pnl") is None:
-            pnl_m = re.search(r'([+\-]\s*\d+(?:\.\d+)?)', metin)
+            pnl_m = re.search(r'([+\-]\s*\d+(?:\.\d+)?)(?!\s*[kK]\b|\s*bin\b)', metin)
             if pnl_m:
                 islem_data["pnl"] = float(pnl_m.group(1).replace(" ", ""))
 
         if islem_data["enstruman"] == "BILINMIYOR" and len(metin.split()) <= 2:
-            islem_data["enstruman"] = metin.strip().upper()
+            enstr = _normalize_enstruman(metin)
+            islem_data["enstruman"] = enstr or metin.strip().upper()
+
+        # Yon son güvenlik: None kalırsa sormak yerine "long" default
+        if not islem_data.get("yon"):
+            islem_data["yon"] = "long"
+
         try:
             await _fotograf_kaydet(update, islem_data)
         except Exception as e:
@@ -459,54 +554,36 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # 1. Görseli indir
         foto_dosyasi = await context.bot.get_file(foto.file_id)
-        foto_bytes = await foto_dosyasi.download_as_bytearray()
+        foto_bytes = bytes(await foto_dosyasi.download_as_bytearray())
 
-        # 2. Supabase'e yükle
-        gorsel_res = await client.post(
-            f"{API_URL}/api/gorsel-yukle",
-            files={"file": ("chart.jpg", bytes(foto_bytes), "image/jpeg")}
+        # 2. Paralel: Supabase yükle + Gemini vision + caption parse
+        async def _gorsel_yukle():
+            res = await client.post(
+                f"{API_URL}/api/gorsel-yukle",
+                files={"file": ("chart.jpg", foto_bytes, "image/jpeg")}
+            )
+            return res.json()
+
+        async def _caption_parse():
+            if not caption:
+                return {}
+            try:
+                return await api_post("/api/claude/parse", json={"mesaj": caption})
+            except Exception:
+                return {}
+
+        gorsel_data, analiz_res, caption_parse = await asyncio.gather(
+            _gorsel_yukle(),
+            gemini_gorsel_analiz(foto_bytes, caption),
+            _caption_parse(),
         )
-        gorsel_data = gorsel_res.json()
+
         if "error" in gorsel_data:
             await update.message.reply_text("Görseli yükleyemedim, tekrar dener misin?")
             return
         gorsel_url = gorsel_data["url"]
 
-        # 3. Claude Vision — base64 ile gönder
-        analiz_res: dict = {}
-        try:
-            foto_b64 = base64.b64encode(bytes(foto_bytes)).decode("utf-8")
-            analiz_res = await api_post(
-                "/api/claude/gorsel-analiz",
-                json={"gorsel_base64": foto_b64, "media_type": "image/jpeg", "caption": caption or None}
-            )
-        except Exception as ae:
-            logger.error(f"Görsel analiz hatası: {ae}")
-
-        # 3b. Caption'ı ayrıca text parser ile analiz et (rr/hesap/pnl için)
-        caption_parse: dict = {}
-        if caption:
-            try:
-                caption_parse = await api_post("/api/claude/parse", json={"mesaj": caption})
-            except Exception:
-                pass
-            # Fallback: caption'da bilinen enstruman anahtar kelimeleri direkt tara
-            if not caption_parse.get("enstruman"):
-                caption_lower = caption.lower()
-                _ENSTRU_MAP = {
-                    "nasdaq": "NAS100", "nas100": "NAS100", "us100": "NAS100",
-                    "xauusd": "XAUUSD", "gold": "XAUUSD", "altın": "XAUUSD", "xau": "XAUUSD",
-                    "dow": "US30", "us30": "US30", "dj30": "US30",
-                    "sp500": "SPX500", "spx": "SPX500", "s&p": "SPX500",
-                    "eurusd": "EURUSD", "gbpusd": "GBPUSD", "usdjpy": "USDJPY",
-                    "btc": "BTCUSD", "btcusd": "BTCUSD", "eth": "ETHUSD",
-                }
-                for anahtar, deger in _ENSTRU_MAP.items():
-                    if anahtar in caption_lower:
-                        caption_parse["enstruman"] = deger
-                        break
-
-        # 4. Hesap eşleştir — her iki kaynaktan gelen isimler birleştirilerek
+        # 3. Hesap eşleştir — her iki kaynaktan gelen isimler birleştir
         hesaplar = await api_get("/api/hesaplar")
         hesaplar = hesaplar if isinstance(hesaplar, list) else []
         tum_hesap_isimleri = list(set(
@@ -515,15 +592,18 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ))
         eslesen_ids = hesaplari_eslestir(tum_hesap_isimleri, caption, hesaplar)
 
-        # Görsel + caption parse birleştir (caption_parse boş değerleri doldurur)
+        # 4. Alanları birleştir (analiz_res öncelikli, caption_parse doldurur)
         enstruman_ham = (analiz_res.get("enstruman") or caption_parse.get("enstruman") or "").upper().strip()
-        yon_ham = analiz_res.get("yon") or caption_parse.get("yon")
+        if not enstruman_ham:
+            enstruman_ham = (_normalize_enstruman(caption) or "").upper()
+
+        yon_ham = analiz_res.get("yon") or caption_parse.get("yon") or _detect_yon(caption)
         pnl_ham = analiz_res.get("pnl") if analiz_res.get("pnl") is not None else caption_parse.get("pnl")
         rr_ham = analiz_res.get("rr_orani") if analiz_res.get("rr_orani") is not None else caption_parse.get("rr_orani")
 
         islem_data: dict = {
             "enstruman": enstruman_ham or "BILINMIYOR",
-            "yon": yon_ham or "long",
+            "yon": yon_ham,  # Eksik kontrolü aşağıda — "long" default yok
             "giris_fiyati": analiz_res.get("giris_fiyati"),
             "cikis_fiyati": analiz_res.get("cikis_fiyati"),
             "breakeven_fiyati": analiz_res.get("breakeven_fiyati"),
@@ -537,7 +617,7 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 5. Eksik zorunlu alanları belirle
         eksik = []
-        if not enstruman_ham:
+        if not enstruman_ham or enstruman_ham == "BILINMIYOR":
             eksik.append("*Parite:* Hangi sembol? (örn: XAUUSD, NAS100, EURUSD)")
         if not yon_ham:
             eksik.append("*Yön:* Long mu short mu?")
@@ -549,6 +629,7 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if eksik:
             pending_fotograflar[chat_id] = islem_data
+            _pending_dump(pending_fotograflar)
             await update.message.reply_text(
                 "Chart yüklendi ✅ Bazı bilgiler eksik:\n\n" + "\n".join(eksik) +
                 "\n\nHepsini tek mesajda yazabilirsin. (örn: _NAS100 short, -150_)",
