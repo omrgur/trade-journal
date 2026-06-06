@@ -170,6 +170,8 @@ async def api_get(endpoint: str) -> dict | list:
     res = await client.get(f"{API_URL}{endpoint}")
     return res.json()
 
+_HESAP_STOPWORDS = {'hesap', 'hesabı', 'hesapta', 'hesabım'}
+
 def hesaplari_eslestir(hesap_isimleri: list[str], mesaj: str, hesaplar: list[dict]) -> list[str]:
     matched = []
     mesaj_lower = mesaj.lower()
@@ -177,11 +179,21 @@ def hesaplari_eslestir(hesap_isimleri: list[str], mesaj: str, hesaplar: list[dic
         if not hesap.get("aktif", True):
             continue
         hesap_isim = hesap["isim"].lower()
+        # 1. Tam eşleşme
         if hesap_isim in mesaj_lower:
             matched.append(hesap["id"])
             continue
+        # 2. Ayırt edici token eşleşmesi ("$5k Hesap" → "5k" mesajda geçiyor mu?)
+        tokens = [t.lstrip('$') for t in hesap_isim.split()
+                  if t.lstrip('$') not in _HESAP_STOPWORDS and len(t.lstrip('$')) >= 2]
+        if tokens and any(tok in mesaj_lower for tok in tokens):
+            matched.append(hesap["id"])
+            continue
+        # 3. Claude'un döndürdüğü hesap isimlerine karşılaştır
         for isim in hesap_isimleri:
-            if isim.lower() in hesap_isim or hesap_isim in isim.lower():
+            isim_n = isim.lower().lstrip('$')
+            hesap_n = hesap_isim.lstrip('$')
+            if isim_n in hesap_n or hesap_n in isim_n:
                 if hesap["id"] not in matched:
                     matched.append(hesap["id"])
                 break
@@ -448,7 +460,6 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     foto = update.message.photo[-1]
     caption = update.message.caption or ""
-    await update.message.reply_text("⏳ Chart analiz ediliyor...")
 
     try:
         # 1. Görseli indir
@@ -466,7 +477,7 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         gorsel_url = gorsel_data["url"]
 
-        # 3. Claude Vision — base64 ile gönder (URL erişim sorunu yok)
+        # 3. Claude Vision — base64 ile gönder
         analiz_res: dict = {}
         try:
             foto_b64 = base64.b64encode(bytes(foto_bytes)).decode("utf-8")
@@ -477,15 +488,28 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as ae:
             logger.error(f"Görsel analiz hatası: {ae}")
 
-        # 4. Hesap eşleştir
+        # 3b. Caption'ı ayrıca text parser ile analiz et (rr/hesap/pnl için)
+        caption_parse: dict = {}
+        if caption:
+            try:
+                caption_parse = await api_post("/api/claude/parse", json={"mesaj": caption})
+            except Exception:
+                pass
+
+        # 4. Hesap eşleştir — her iki kaynaktan gelen isimler birleştirilerek
         hesaplar = await api_get("/api/hesaplar")
         hesaplar = hesaplar if isinstance(hesaplar, list) else []
-        eslesen_ids = hesaplari_eslestir(analiz_res.get("hesap_isimleri") or [], caption, hesaplar)
+        tum_hesap_isimleri = list(set(
+            (analiz_res.get("hesap_isimleri") or []) +
+            (caption_parse.get("hesap_isimleri") or [])
+        ))
+        eslesen_ids = hesaplari_eslestir(tum_hesap_isimleri, caption, hesaplar)
 
-        # Analiz'den gelen değerleri sakla (eksik alan tespiti için ham hali)
-        enstruman_ham = (analiz_res.get("enstruman") or "").upper().strip()
-        yon_ham = analiz_res.get("yon")  # None ise çıkarılamadı
-        pnl_ham = analiz_res.get("pnl")
+        # Görsel + caption parse birleştir (caption_parse boş değerleri doldurur)
+        enstruman_ham = (analiz_res.get("enstruman") or caption_parse.get("enstruman") or "").upper().strip()
+        yon_ham = analiz_res.get("yon") or caption_parse.get("yon")
+        pnl_ham = analiz_res.get("pnl") if analiz_res.get("pnl") is not None else caption_parse.get("pnl")
+        rr_ham = analiz_res.get("rr_orani") if analiz_res.get("rr_orani") is not None else caption_parse.get("rr_orani")
 
         islem_data: dict = {
             "enstruman": enstruman_ham or "BILINMIYOR",
@@ -494,21 +518,21 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "cikis_fiyati": analiz_res.get("cikis_fiyati"),
             "breakeven_fiyati": analiz_res.get("breakeven_fiyati"),
             "pnl": pnl_ham,
-            "rr_orani": analiz_res.get("rr_orani"),
+            "rr_orani": rr_ham,
             "hesap_idleri": eslesen_ids,
             "notlar": analiz_res.get("notlar") or (caption if caption else None),
             "kaynak": "telegram",
             "chart_gorseli_url": gorsel_url,
         }
 
-        # 5. Eksik zorunlu/önemli alanları belirle
+        # 5. Eksik zorunlu alanları belirle
         eksik = []
         if not enstruman_ham:
             eksik.append("*Parite:* Hangi sembol? (örn: XAUUSD, NAS100, EURUSD)")
         if not yon_ham:
             eksik.append("*Yön:* Long mu short mu?")
         if pnl_ham is None:
-            eksik.append("*PnL:* Kâr/zarar miktarı? (isteğe bağlı, bilmiyorsan geç)")
+            eksik.append("*PnL:* Kâr/zarar miktarı? (bilmiyorsan geç)")
         if not eslesen_ids:
             hesap_isimleri_str = ", ".join(h["isim"] for h in hesaplar if h.get("aktif")) if hesaplar else ""
             eksik.append(f"*Hesap:* Hangi hesap? ({hesap_isimleri_str or 'isteğe bağlı'})")
@@ -535,11 +559,26 @@ async def _fotograf_kaydet(update, islem_data: dict):
     enstruman = sonuc.get("enstruman") or islem_data["enstruman"]
     yon = (sonuc.get("yon") or islem_data["yon"]).upper()
     pnl = sonuc.get("pnl")
+    rr = sonuc.get("rr_orani")
     pnl_str = f"+{pnl}" if pnl and pnl > 0 else str(pnl) if pnl is not None else None
-    mesaj = f"✅ *Chart kaydedildi.*\n{enstruman} {yon}"
+
+    onay = f"✅ *Kaydedildi* — {enstruman} {yon}"
     if pnl_str:
-        mesaj += f" | `{pnl_str}`"
-    await update.message.reply_text(mesaj, parse_mode="Markdown")
+        onay += f" | `{pnl_str}`"
+    if rr:
+        onay += f" | `{rr}R`"
+    await update.message.reply_text(onay, parse_mode="Markdown")
+
+    try:
+        islem_ozet = (
+            f"{enstruman} {yon} | "
+            f"PnL: {pnl_str or '?'} | RR: {rr or '?'} | Kaynak: chart"
+        )
+        karakter_mesaj = await gemini_koc_yorum(islem_ozet)
+        if karakter_mesaj:
+            await update.message.reply_text(karakter_mesaj, parse_mode="Markdown")
+    except Exception as ge:
+        logger.warning(f"Gemini koç yorumu alınamadı: {ge}")
 
 
 # ── Ana ──────────────────────────────────────────────────────
