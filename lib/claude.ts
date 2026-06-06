@@ -13,20 +13,26 @@ const PARSE_SYSTEM_PROMPT = `Sen bir trading asistanısın. Kullanıcının Tür
   "breakeven_fiyati": sayı veya null,
   "pnl": sayı veya null,
   "rr_orani": sayı veya null,
-  "hesap_isimleri": string[] (mesajda bahsedilen hesap adları veya boş array),
+  "hesap_isimleri": string[],
   "notlar": string veya null
 }
 
 Kurallar:
 - Fiyatları sayı olarak ver (2650.5)
-- RR'yi sayı olarak ver (2RR → 2)
-- Enstrümanı büyük harf yaz (xauusd → XAUUSD)
+- RR'yi sayı olarak ver (2RR → 2, 1.5RR → 1.5)
+- PnL'i sayı olarak ver: "250 dolar" → 250 | "-150 dolar" → -150 | "zarar 100" → -100 | "kâr 200" → 200
+- Enstrümanı normalize et:
+    NASDAQ / US100 / NAS100 / Nasdaq → NAS100
+    GOLD / XAUUSD / XAU / altın → XAUUSD
+    DOW / US30 / DJ30 → US30
+    SP500 / SPX / S&P500 → SPX500
+    Diğer → büyük harfe çevir (EURUSD, GBPUSD, BTCUSD vb.)
+- Eğer mesaj "PAR​ITE: X YÖN: Y PNL: Z" gibi etiketli formattaysa etiketleri yok say, değerleri çıkar:
+    "PARITE: NASDAQ YÖN: LONG PNL: 250 DOLAR" → {enstruman: "NAS100", yon: "long", pnl: 250}
 - hesap_isimleri: mesajda geçen hesap adlarını aynen yaz. Örnekler:
-  "kendi bakiyemde" → ["kendi bakiyem"]
-  "hem kendi hem de $10k challenge hesabımda" → ["kendi bakiyem", "$10k challenge"]
-  "funded hesabımda" → ["funded hesap"]
-  "faz 1 hesabımda" → ["faz 1"]
-  "prop hesap" → ["prop hesap"]`
+    "kendi bakiyemde" → ["kendi bakiyem"]
+    "$10k challenge hesabımda" → ["$10k challenge"]
+    "funded hesabımda" → ["funded hesap"]`
 
 export async function parseTradeMesaji(mesaj: string): Promise<ParsedIslem> {
   const response = await client.messages.create({
@@ -52,11 +58,15 @@ export async function gorseldenIslemCikar(gorsel: GorselKaynak, caption?: string
 
   const metinKismi = `Bu bir TradingView chart görseli. Aşağıdakileri bul ve JSON döndür:
 
-1. ENSTRÜMAN: Sol üst köşede veya başlıkta yazar (XAUUSD, NAS100, EURUSD, GBPUSD, US30, BTCUSD vb). Göremiyorsan null yaz.
-2. YÖN: Entry marker, ok veya pozisyon kutusu long mu short mu gösteriyor? Emin değilsen null yaz.
-3. GİRİŞ/ÇIKIŞ FİYATI: Yatay çizgi etiketlerinde görünüyorsa yaz, yoksa null.
-4. PnL / RR: Chart veya panelde yazıyorsa yaz, yoksa null.
-${caption ? `\nKullanıcının notu: "${caption}"` : ''}`
+1. ENSTRÜMAN: Sol üst köşede veya başlıkta yazar (NAS100, XAUUSD, EURUSD, US30 vb). Göremiyorsan null yaz.
+2. YÖN: Entry marker, ok veya pozisyon kutusu long mu short mu? Emin değilsen null yaz.
+3. GİRİŞ FİYATI: Entry seviyesi yatay çizgide veya etikette yazıyorsa.
+4. ÇIKIŞ FİYATI: TP (Take Profit) çizgisi veya etiketi varsa.
+5. STOP LOSS: SL çizgisi veya etiketi varsa giris_fiyati değil, notlar alanına "SL: X" formatında ekle.
+6. PnL / RR: Chart veya strateji panelinde yazıyorsa.
+${caption ? `\nKullanıcının notu: "${caption}"` : ''}
+
+ÖNEMLİ: Göremediğin alanları null yaz, tahmin etme.`
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
