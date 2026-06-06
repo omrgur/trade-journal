@@ -575,6 +575,15 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _fotograf_kaydet(update, islem_data: dict):
     sonuc = await api_post("/api/islemler", json=islem_data)
+
+    if sonuc.get("error"):
+        logger.error(f"İşlem kayıt hatası: {sonuc['error']} | veri: {islem_data}")
+        await update.message.reply_text(
+            f"❌ Kaydederken hata oluştu: `{sonuc['error']}`",
+            parse_mode="Markdown"
+        )
+        return
+
     enstruman = sonuc.get("enstruman") or islem_data["enstruman"]
     yon = (sonuc.get("yon") or islem_data["yon"]).upper()
     pnl = sonuc.get("pnl")

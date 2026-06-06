@@ -12,12 +12,16 @@ CREATE TABLE islemler (
   pnl DECIMAL(10,2),
   rr_orani DECIMAL(5,2),
   hesap_turu TEXT CHECK (hesap_turu IN ('prop', 'kendi')),
+  hesap_idleri TEXT[] DEFAULT '{}',
   chart_gorseli_url TEXT,
   notlar TEXT,
   kaynak TEXT DEFAULT 'dashboard' CHECK (kaynak IN ('telegram', 'dashboard')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Eğer tablo zaten varsa hesap_idleri kolonu yoksa ekle:
+-- ALTER TABLE islemler ADD COLUMN IF NOT EXISTS hesap_idleri TEXT[] DEFAULT '{}';
 
 -- updated_at otomatik güncelleme
 CREATE OR REPLACE FUNCTION set_updated_at()
