@@ -57,25 +57,33 @@ YAPMA:
 # Onay bekleyen işlemler: chat_id → işlem verisi
 pending_trades: dict[int, dict] = {}
 
+# Per-user sohbet geçmişi: chat_id → Gemini history listesi
+chat_gecmisleri: dict[int, list] = {}
+
 
 # ── Gemini direkt fonksiyonları ──────────────────────────────
 
-async def gemini_sohbet(mesaj: str) -> str | None:
-    """Sohbet mesajına Gemini karakteriyle cevap ver."""
+async def gemini_sohbet(chat_id: int, mesaj: str) -> str | None:
+    """Sohbet mesajına Gemini karakteriyle cevap ver (konuşma geçmişiyle)."""
     if not GEMINI_API_KEY:
-        return None
+        logger.error("GEMINI_API_KEY Railway'de tanımlı değil!")
+        return "⚠️ GEMINI_API_KEY eksik — Railway Variables'a ekle"
     try:
         model = genai.GenerativeModel(
             model_name="gemini-2.5-pro",
             system_instruction=SOHBET_KARAKTERI
         )
+        gecmis = chat_gecmisleri.get(chat_id, [])
+        chat = model.start_chat(history=gecmis)
         response = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: model.generate_content(mesaj)
+            None, lambda: chat.send_message(mesaj)
         )
+        # Son 20 tur tut (40 mesaj = 20 kullanıcı + 20 bot)
+        chat_gecmisleri[chat_id] = chat.history[-40:]
         return response.text
     except Exception as e:
         logger.error(f"Gemini sohbet hata: {e}")
-        return None
+        return f"⚠️ Gemini hata: {str(e)[:200]}"
 
 
 async def gemini_koc_yorum(islem_ozet: str) -> str | None:
@@ -318,7 +326,7 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Trade mi sohbet mi?
     if not trade_mesaji_mi(metin):
-        cevap = await gemini_sohbet(metin)
+        cevap = await gemini_sohbet(chat_id, metin)
         if cevap:
             await update.message.reply_text(cevap, parse_mode="Markdown")
         else:
