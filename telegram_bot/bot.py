@@ -60,6 +60,9 @@ pending_trades: dict[int, dict] = {}
 # Per-user sohbet geçmişi: chat_id → Gemini history listesi
 chat_gecmisleri: dict[int, list] = {}
 
+# Parite beklenen tamamlanmamış fotoğraf işlemleri: chat_id → kısmi işlem verisi
+pending_fotograflar: dict[int, dict] = {}
+
 
 # ── Gemini direkt fonksiyonları ──────────────────────────────
 
@@ -326,6 +329,25 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Tamam, iptal ettim.", reply_markup=ReplyKeyboardRemove())
             return
 
+    # Parite beklenen fotoğraf var mı?
+    if chat_id in pending_fotograflar:
+        islem_data = pending_fotograflar.pop(chat_id)
+        islem_data["enstruman"] = metin.strip().upper()
+        try:
+            sonuc = await api_post("/api/islemler", json=islem_data)
+            enstruman = sonuc.get("enstruman") or islem_data["enstruman"]
+            yon = (sonuc.get("yon") or islem_data["yon"]).upper()
+            pnl = sonuc.get("pnl")
+            pnl_str = f"+{pnl}" if pnl and pnl > 0 else str(pnl) if pnl is not None else "?"
+            await update.message.reply_text(
+                f"✅ *Kaydedildi.* {enstruman} {yon}" + (f" | `{pnl_str}`" if pnl is not None else ""),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Fotoğraf tamamlama hatası: {e}")
+            await update.message.reply_text("Kaydederken bir sorun oluştu.")
+        return
+
     # Trade mi sohbet mi?
     if not trade_mesaji_mi(metin):
         cevap = await gemini_sohbet(chat_id, metin)
@@ -439,7 +461,17 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "chart_gorseli_url": gorsel_url,
         }
 
-        # 5. Kaydet
+        # 5. Enstrüman bilinmiyorsa sor, kaydetme
+        if islem_data["enstruman"] == "BILINMIYOR":
+            pending_fotograflar[chat_id] = islem_data
+            await update.message.reply_text(
+                "Chart yüklendi ama parite adını okuyamadım. Hangi pariteydi?\n"
+                "_Örn: XAUUSD, NAS100, EURUSD_",
+                parse_mode="Markdown"
+            )
+            return
+
+        # 6. Kaydet
         sonuc = await api_post("/api/islemler", json=islem_data)
         enstruman = sonuc.get("enstruman") or islem_data["enstruman"]
         yon = (sonuc.get("yon") or islem_data["yon"]).upper()
