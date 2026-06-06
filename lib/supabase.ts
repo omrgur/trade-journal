@@ -6,7 +6,8 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // Client-side (dashboard)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Server-side (API routes) — kişisel uygulama, RLS devre dışı
+// Server-side (API routes) — service role key, storage upload ve admin işlemleri için
 export function supabaseAdmin() {
-  return createClient(supabaseUrl, supabaseAnonKey)
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnonKey
+  return createClient(supabaseUrl, serviceKey)
 }
