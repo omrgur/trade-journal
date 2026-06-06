@@ -83,7 +83,9 @@ async def gemini_sohbet(chat_id: int, mesaj: str) -> str | None:
         return response.text
     except Exception as e:
         logger.error(f"Gemini sohbet hata: {e}")
-        return f"⚠️ Gemini hata: {str(e)[:200]}"
+        if "429" in str(e) or "quota" in str(e).lower() or "rate" in str(e).lower():
+            return None  # Sessiz düş, fallback göster
+        return None
 
 
 async def gemini_koc_yorum(islem_ozet: str) -> str | None:
@@ -108,7 +110,7 @@ async def gemini_koc_yorum(islem_ozet: str) -> str | None:
         return response.text
     except Exception as e:
         logger.error(f"Gemini koç yorum hata: {e}")
-        return None
+        return None  # Koç yorumu opsiyonel, sessizce atla
 
 # Trade mesajı mı sohbet mi — hızlı keyword kontrolü
 TRADE_KELIMELERI = [
@@ -389,10 +391,14 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     foto = update.message.photo[-1]
     caption = update.message.caption or ""
+    await update.message.reply_text("⏳ Chart analiz ediliyor...")
+
     try:
+        # 1. Görseli Telegram'dan indir
         foto_dosyasi = await context.bot.get_file(foto.file_id)
         foto_bytes = await foto_dosyasi.download_as_bytearray()
 
+        # 2. Supabase'e yükle
         gorsel_res = await client.post(
             f"{API_URL}/api/gorsel-yukle",
             files={"file": ("chart.jpg", bytes(foto_bytes), "image/jpeg")}
@@ -403,41 +409,52 @@ async def fotograf_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         gorsel_url = gorsel_data["url"]
+
+        # 3. Claude Vision ile görseli analiz et
+        try:
+            analiz_res = await api_post(
+                "/api/claude/gorsel-analiz",
+                json={"gorsel_url": gorsel_url, "caption": caption or None}
+            )
+        except Exception as ae:
+            logger.error(f"Görsel analiz hatası: {ae}")
+            analiz_res = {}
+
+        # 4. Hesap eşleştir
+        hesaplar = await api_get("/api/hesaplar")
+        hesaplar = hesaplar if isinstance(hesaplar, list) else []
+        eslesen_ids = hesaplari_eslestir(analiz_res.get("hesap_isimleri") or [], caption, hesaplar)
+
         islem_data: dict = {
-            "enstruman": "BILINMIYOR",
-            "yon": "long",
+            "enstruman": (analiz_res.get("enstruman") or "BILINMIYOR").upper(),
+            "yon": analiz_res.get("yon") or "long",
+            "giris_fiyati": analiz_res.get("giris_fiyati"),
+            "cikis_fiyati": analiz_res.get("cikis_fiyati"),
+            "breakeven_fiyati": analiz_res.get("breakeven_fiyati"),
+            "pnl": analiz_res.get("pnl"),
+            "rr_orani": analiz_res.get("rr_orani"),
+            "hesap_idleri": eslesen_ids,
+            "notlar": analiz_res.get("notlar") or (caption if caption else None),
             "kaynak": "telegram",
             "chart_gorseli_url": gorsel_url,
-            "hesap_idleri": []
         }
 
-        if len(caption) > 3:
-            try:
-                parse_res = await api_post("/api/claude/parse", json={"mesaj": caption})
-                if parse_res.get("enstruman"):
-                    hesaplar = await api_get("/api/hesaplar")
-                    hesaplar = hesaplar if isinstance(hesaplar, list) else []
-                    eslesen_ids = hesaplari_eslestir(parse_res.get("hesap_isimleri") or [], caption, hesaplar)
-                    islem_data.update({
-                        "enstruman": parse_res["enstruman"].upper(),
-                        "yon": parse_res.get("yon") or "long",
-                        "giris_fiyati": parse_res.get("giris_fiyati"),
-                        "cikis_fiyati": parse_res.get("cikis_fiyati"),
-                        "breakeven_fiyati": parse_res.get("breakeven_fiyati"),
-                        "pnl": parse_res.get("pnl"),
-                        "rr_orani": parse_res.get("rr_orani"),
-                        "hesap_idleri": eslesen_ids,
-                        "notlar": parse_res.get("notlar"),
-                    })
-            except Exception:
-                pass
-
+        # 5. Kaydet
         sonuc = await api_post("/api/islemler", json=islem_data)
-        await update.message.reply_text(
-            f"✅ *Chart kaydedildi.*\n{sonuc.get('enstruman', '?')} {(sonuc.get('yon') or '').upper()}"
-            + ("\n\n_Açıklama ekleyerek detayları da kaydedebilirsin._" if len(caption) < 3 else ""),
-            parse_mode="Markdown"
+        enstruman = sonuc.get("enstruman") or islem_data["enstruman"]
+        yon = (sonuc.get("yon") or islem_data["yon"]).upper()
+        pnl = sonuc.get("pnl")
+        pnl_str = f"+{pnl}" if pnl and pnl > 0 else str(pnl) if pnl is not None else "?"
+
+        onay = (
+            f"✅ *Chart kaydedildi.*\n"
+            f"{enstruman} {yon}"
+            + (f" | `{pnl_str}`" if pnl is not None else "")
+            + ("\n\n_Detay eklemek istersen caption ile yeniden gönderebilirsin._"
+               if not caption else "")
         )
+        await update.message.reply_text(onay, parse_mode="Markdown")
+
     except Exception as e:
         logger.error(f"fotoğraf hatası: {e}")
         await update.message.reply_text("Görselde bir sorun oldu, tekrar dener misin?")

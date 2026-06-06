@@ -41,6 +41,34 @@ export async function parseTradeMesaji(mesaj: string): Promise<ParsedIslem> {
   return parsed as ParsedIslem
 }
 
+export async function gorseldenIslemCikar(gorselUrl: string, caption?: string): Promise<ParsedIslem> {
+  const metinKismi = caption
+    ? `Chart görselini incele. Kullanıcının notu: "${caption}". İşlem detaylarını çıkar ve JSON döndür.`
+    : 'Chart görselini incele. Long mu short mu? Giriş/çıkış fiyatı, PnL, RR görünüyor mu? Çıkarabildiğin kadar çıkar, JSON döndür.'
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 500,
+    system: PARSE_SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url: gorselUrl } },
+        { type: 'text', text: metinKismi },
+      ],
+    }],
+  })
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+  try {
+    const json = text.match(/\{[\s\S]*\}/)?.[0] ?? '{}'
+    const parsed = JSON.parse(json)
+    if (!Array.isArray(parsed.hesap_isimleri)) parsed.hesap_isimleri = []
+    return parsed as ParsedIslem
+  } catch {
+    return { enstruman: null, yon: null, giris_fiyati: null, cikis_fiyati: null, breakeven_fiyati: null, pnl: null, rr_orani: null, hesap_isimleri: [], notlar: caption ?? null }
+  }
+}
+
 export async function getSonrasıSoruları(islem: Islem): Promise<string[]> {
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
