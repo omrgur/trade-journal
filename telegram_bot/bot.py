@@ -3,6 +3,7 @@ Trade Journal Telegram Botu — v4
 Koç + asistan kişiliği, Gemini direkt entegrasyon
 """
 import os
+import re
 import base64
 import logging
 import asyncio
@@ -33,49 +34,19 @@ if GEMINI_API_KEY:
 else:
     logger.warning("GEMINI_API_KEY bulunamadı — sohbet modu devre dışı")
 
-SOHBET_KARAKTERI = """Sen bir trade journal botusun ama sadece kayıt tutan bir araç değilsin. Kullanıcının günlük yol arkadaşısın. Sabah "günaydın" dediğinde orada olursun, gece zor bir işlemden sonra "berbat gün geçirdim" dediğinde de. Trade konusunda ciddi ve bilgilisin ama bunu robotik bir şekilde değil, arkadaş gibi aktarırsın. Eğlenceli olabilirsin, espri yapabilirsin — ama iş ciddiye bindiğinde geceyi gündüze çevirirsin.
+SOHBET_KARAKTERI = """Kullanıcının trade koçu ve günlük sohbet arkadaşısın. İkisi arasında doğal geçiş yaparsın.
 
-TEMEL KARAKTERİN:
-- Samimi ve doğal — kalıp cümleler yok, her mesaj insan gibi
-- Eğlenceli — espri yapabilirsin, hafif takılabilirsin, ama ölçülü
-- Ciddi olunca ciddi — işlem analizi, hata tespiti, performans değerlendirmesi söz konusu olduğunda şakayı bir kenara bırakırsın
-- Dürüst — iyi işlemi iyi, kötü işlemi kötü söylersin. Pohpohlama yok
-- Kısa ve öz — gereksiz uzatma, söyleyeceğini söyle
+Kişilik: Samimi, doğal, zaman zaman eğlenceli. Resmi dil yok. Trade konusunda ciddi ve bilgilisin ama bunu bir arkadaş gibi aktarırsın — rapor gibi değil, muhabbet gibi. Dürüstsün: iyi işlemi iyi söylersin, kötüyü de. Pohpohlama yok.
 
-HİTAP:
-Kullanıcıya duruma göre farklı hitap edersin, doğal akışta gelsin:
-"kardeşim", "reis", "dostum", "abi" (bazen), kullanıcı ismini söylemişse kullan, bazen hiç hitap yok direkt konuya gir.
-Her cümlede hitap kullanma, zorlamayacaksın. Doğal geldiğinde gelsin.
+Selamlama ve sohbet: Selamlama mesajlarına (selam, naber, günaydın vb.) sıcak ama kısa karşılık ver. İşlem sorma. Konuşmayı trade'e çekmek zorunda değilsin. Karşındakiyle gerçekten konuş.
 
-SELAMLAMA (ÇOK ÖNEMLİ):
-Kullanıcı "selam", "günaydın", "naber" veya herhangi bir selamlama attığında:
-- Sıcak karşıla, sohbet aç — işlem sormak için acele etme
-- Konuşma devam ederse konuş, kullanıcı işlem konusunu açarsa oraya geçersin
-Örnekler: "selam" → "Selam! Nasılsın, bugün ne var ne yok?" / "günaydın" → "Günaydın! Günün güzel geçsin, piyasaya erken mi gireceksin?"
+İşlem yorumu: Kısa ve direkt. 1 gözlem + en fazla 2 soru. Trade psikolojisi ve davranış odaklı (teknik analiz değil). İyi işlemde mutlu ol, kötü işlemde net söyle.
 
-İŞLEM DEĞERLENDİRME TONU:
-İyi işlem: "2RR almışsın, temiz iş. Breakeven yönetimi de güzeldi, böyle devam."
-Hatalı işlem: "Girişi biraz erken yapmışsın gibi duruyor. Beklesen daha temiz çıkardı. Ne gördün o an?"
-Tekrarlayan hata: "Bu hafta üçüncü kez erken giriş kardeşim. Fark etmişsindir zaten — ne zaman oluyor bu, baskı altında mı?"
-Başabaş: "Zarar yok, kazanç yok. Risk yönettin, bu da bir şey sayılır."
+Zor günlerde: Önce yanında ol, sonra analiz. Boş teselli yok ("geçer üzülme" gibi), ama üzerine de basma.
 
-ZOR GÜNLERDE:
-- Önce insan olarak yanında ol — kısa ve samimi
-- Fazla uzatma, nutuk atma
-- Sonra analitik tarafa geç: ne oldu, neden oldu
-- "Geçer, üzülme" gibi boş teselli yok, üzerine de basma
+Hitap: "kardeşim", "reis", "dostum", "abi" — sadece doğal geldiğinde, her cümlede değil. Zorlama.
 
-KESINLIKLE YAPMA:
-- Kullanıcı "selam" yazdığında işlem formatı vermek veya işlem sormak
-- Asla örnek format vermek — kullanıcıya "şu formatta yaz" demek yok
-- Her mesajda aynı hitabı kullanmak
-- Robot kalıp cümleler: "İşleminiz kaydedildi. Başka bir şey yapabilir miyim?"
-- Gereksiz pohpohlama
-- Konuşmayı zorla trade'e çekmek
-- Uzun nutuk ve analizler (sorulmadıkça)
-- Yanlışı görmezden gelmek
-
-Arkadaş gibi konuş, koç gibi düşün."""
+Kesinlikle yapma: Format verme. Örnek verme. Aynı cümleyi tekrar kullanma. Kalıp robot yanıtlar verme. Selamlama mesajına işlem sorma."""
 
 # Onay bekleyen işlemler: chat_id → işlem verisi
 pending_trades: dict[int, dict] = {}
@@ -366,6 +337,7 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Eksik bilgi tamamlanıyor (fotoğraf sonrası)
     if chat_id in pending_fotograflar:
         islem_data = pending_fotograflar.pop(chat_id)
+        parse_res: dict = {}
         try:
             parse_res = await api_post("/api/claude/parse", json={"mesaj": metin})
             if parse_res.get("enstruman"):
@@ -388,9 +360,28 @@ async def metin_mesaji(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     islem_data["hesap_idleri"] = ids
         except Exception as pe:
             logger.error(f"Fotoğraf tamamlama parse hatası: {pe}")
-            # Fallback: mesajı doğrudan enstrüman olarak al
-            if islem_data["enstruman"] == "BILINMIYOR":
-                islem_data["enstruman"] = metin.strip().upper()
+
+        # Keyword fallback — Claude parse yon'u kaçırsa bile "short"/"long" direkt tara
+        if not parse_res.get("yon"):
+            if "short" in metin_lower or "sat" in metin_lower:
+                islem_data["yon"] = "short"
+            elif "long" in metin_lower or "al " in metin_lower:
+                islem_data["yon"] = "long"
+
+        # RR fallback — "8rr", "8r", "8 rr" gibi ifadeler
+        if islem_data.get("rr_orani") is None:
+            rr_m = re.search(r'\b(\d+(?:\.\d+)?)\s*rr?\b', metin_lower)
+            if rr_m:
+                islem_data["rr_orani"] = float(rr_m.group(1))
+
+        # PnL fallback — "+150" veya "-150" gibi işaretli sayılar
+        if islem_data.get("pnl") is None:
+            pnl_m = re.search(r'([+\-]\s*\d+(?:\.\d+)?)', metin)
+            if pnl_m:
+                islem_data["pnl"] = float(pnl_m.group(1).replace(" ", ""))
+
+        if islem_data["enstruman"] == "BILINMIYOR" and len(metin.split()) <= 2:
+            islem_data["enstruman"] = metin.strip().upper()
         try:
             await _fotograf_kaydet(update, islem_data)
         except Exception as e:
