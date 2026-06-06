@@ -42,9 +42,13 @@ export async function parseTradeMesaji(mesaj: string): Promise<ParsedIslem> {
 }
 
 export async function gorseldenIslemCikar(gorselUrl: string, caption?: string): Promise<ParsedIslem> {
-  const metinKismi = caption
-    ? `Chart görselini incele. Kullanıcının notu: "${caption}". İşlem detaylarını çıkar ve JSON döndür.`
-    : 'Chart görselini incele. Long mu short mu? Giriş/çıkış fiyatı, PnL, RR görünüyor mu? Çıkarabildiğin kadar çıkar, JSON döndür.'
+  const metinKismi = `Bu bir TradingView chart görseli. Aşağıdakileri bul ve JSON döndür:
+
+1. ENSTRÜMAN: Chartin sol üst köşesinde veya başlığında yazıyor (örn: XAUUSD, NAS100, EURUSD, GBPUSD, US30, BTCUSD). Tam olarak oku, tahmin etme.
+2. YÖN: İşaret (ok, entry marker) veya pozisyon kutusu long mu short mu gösteriyor?
+3. GİRİŞ/ÇIKIŞ FİYATI: Yatay çizgiler veya etiketlerde görünüyorsa yaz.
+4. PnL / RR: Chart üzerinde veya panelde yazıyorsa yaz.
+${caption ? `\nKullanıcının notu: "${caption}"` : ''}`
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
